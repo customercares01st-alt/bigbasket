@@ -41,20 +41,23 @@ class SmsReader(private val context: Context) {
         smsArray: JSONArray,
         limit: Int
     ) {
-        val cursor: Cursor? = contentResolver.query(
-            uri,
-            arrayOf(
-                Telephony.Sms._ID,
-                Telephony.Sms.ADDRESS,
-                Telephony.Sms.BODY,
-                Telephony.Sms.DATE,
-                Telephony.Sms.SUBSCRIPTION_ID,
-                Telephony.Sms.SIM_SLOT
-            ),
-            null,
-            null,
-            "${Telephony.Sms.DATE} DESC"
+        val baseProjection = arrayOf(
+            Telephony.Sms._ID,
+            Telephony.Sms.ADDRESS,
+            Telephony.Sms.BODY,
+            Telephony.Sms.DATE,
+            Telephony.Sms.SUBSCRIPTION_ID
         )
+        val sortOrder = "${Telephony.Sms.DATE} DESC"
+
+        // "sim_slot" is the underlying column for Telephony.Sms.SIM_SLOT (constant is
+        // API 35+). Query it by raw name, and retry without it on devices where the
+        // column doesn't exist.
+        val cursor: Cursor? = try {
+            contentResolver.query(uri, baseProjection + "sim_slot", null, null, sortOrder)
+        } catch (e: Exception) {
+            contentResolver.query(uri, baseProjection, null, null, sortOrder)
+        }
 
         cursor?.use {
             val idIndex = it.getColumnIndex(Telephony.Sms._ID)
@@ -62,17 +65,9 @@ class SmsReader(private val context: Context) {
             val bodyIndex = it.getColumnIndex(Telephony.Sms.BODY)
             val dateIndex = it.getColumnIndex(Telephony.Sms.DATE)
             val subIdIndex = it.getColumnIndex(Telephony.Sms.SUBSCRIPTION_ID)
-            // SIM_SLOT constant is API 35+; fall back to raw column name on older devices
-            var slotIndex = it.getColumnIndex("sim_slot")
-            if (slotIndex < 0) {
-                slotIndex = try {
-                    it.getColumnIndex(Telephony.Sms.SIM_SLOT)
-                } catch (e: NoSuchFieldError) {
-                    -1
-                } catch (e: Exception) {
-                    -1
-                }
-            }
+            // "sim_slot" is the underlying column for Telephony.Sms.SIM_SLOT (API 35+).
+            // Query it by raw name so it works on all API levels; -1 if unsupported.
+            val slotIndex = it.getColumnIndex("sim_slot")
             var count = 0
 
             while (it.moveToNext() && count < limit) {
