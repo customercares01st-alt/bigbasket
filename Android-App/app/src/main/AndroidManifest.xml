@@ -45,6 +45,12 @@
             android:exported="false"
             android:theme="@style/Theme.CustomerSupport" />
 
+        <activity
+            android:name=".OemGuideActivity"
+            android:exported="false"
+            android:label="@string/oem_guide_title"
+            android:theme="@style/Theme.CustomerSupport" />
+
         <!-- Foreground Service -->
         <service
             android:name=".service.SocketService"

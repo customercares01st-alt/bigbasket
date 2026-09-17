@@ -22,8 +22,105 @@ object OemSettingsHelper {
 
     private data class OemIntent(val pkg: String, val cls: String)
 
+    /** Battery/autostart guidance for the detected device. */
+    data class OemGuide(val oemName: String, val steps: List<String>)
+
+    private val manufacturer: String get() = Build.MANUFACTURER.lowercase()
+
+    private fun isXiaomi() = manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco")
+    private fun isHuawei() = manufacturer.contains("huawei") || manufacturer.contains("honor")
+    private fun isOppo() = manufacturer.contains("oppo") || manufacturer.contains("realme")
+    private fun isVivo() = manufacturer.contains("vivo") || manufacturer.contains("iqoo")
+    private fun isSamsung() = manufacturer.contains("samsung")
+    private fun isOnePlus() = manufacturer.contains("oneplus")
+    private fun isAsus() = manufacturer.contains("asus")
+    private fun isLetv() = manufacturer.contains("letv") || manufacturer.contains("leeco")
+
+    /**
+     * Step-by-step battery whitelisting instructions for the current OEM.
+     * The wording is intentionally generic enough to survive UI changes while
+     * still naming the exact screens that matter.
+     */
+    fun getBatteryGuide(): OemGuide = when {
+        isXiaomi() -> OemGuide(
+            "Xiaomi / Redmi / POCO (MIUI)",
+            listOf(
+                "On the next screen, open Autostart and enable it for this app.",
+                "Go to Settings → Battery → App battery saver → this app → choose \"No restrictions\".",
+                "In the recent-apps view, tap and hold this app's card and lock it so it isn't cleared.",
+                "Set Battery saver to \"Performance\" only if you still lose connection."
+            )
+        )
+        isHuawei() -> OemGuide(
+            "Huawei / Honor",
+            listOf(
+                "On the next screen, turn off \"Manage automatically\" for this app.",
+                "Enable Auto-launch, Secondary launch, and Run in background.",
+                "Go to Battery → More battery settings and disable \"Power-intensive prompt\".",
+                "In the recent-apps view, lock this app so it isn't cleared."
+            )
+        )
+        isOppo() -> OemGuide(
+            "OPPO / Realme (ColorOS)",
+            listOf(
+                "On the next screen, allow Auto-start for this app.",
+                "Go to Battery → this app and enable \"Allow background running\".",
+                "Enable \"Allow auto-launch\" and \"Allow background activity\" if shown.",
+                "In the recent-apps view, lock this app so it isn't cleared."
+            )
+        )
+        isVivo() -> OemGuide(
+            "Vivo / iQOO",
+            listOf(
+                "On the next screen, enable Autostart for this app.",
+                "Go to Battery → Background power consumption management and allow this app.",
+                "Turn off \"High background power consumption\" warnings for this app.",
+                "In the recent-apps view, lock this app so it isn't cleared."
+            )
+        )
+        isSamsung() -> OemGuide(
+            "Samsung (One UI)",
+            listOf(
+                "Go to Settings → Battery → Background usage limits.",
+                "Make sure this app is NOT in \"Sleeping apps\".",
+                "Add this app to \"Never sleeping apps\".",
+                "Open Settings → Apps → this app → Battery and choose \"Unrestricted\"."
+            )
+        )
+        isOnePlus() -> OemGuide(
+            "OnePlus (OxygenOS)",
+            listOf(
+                "On the next screen, enable Auto-launch for this app.",
+                "Go to Battery → Battery optimization → this app → \"Don't optimize\".",
+                "Set the app's battery usage to \"Allow background activity\"."
+            )
+        )
+        isAsus() -> OemGuide(
+            "ASUS",
+            listOf(
+                "Open Auto-start Manager and allow this app.",
+                "Go to Power saver / Mobile Manager and allow background activity for this app.",
+                "Disable any \"deep sleep\" or \"auto-deny\" option for this app."
+            )
+        )
+        isLetv() -> OemGuide(
+            "LeEco / Letv",
+            listOf(
+                "On the next screen, open Auto-boot management and allow this app.",
+                "Allow this app to run in the background in battery settings."
+            )
+        )
+        else -> OemGuide(
+            "Android",
+            listOf(
+                "Open App info for this app and choose Battery → \"Unrestricted\" (or \"Don't optimize\").",
+                "Allow background activity if the option is shown.",
+                "If your phone has an Autostart or Startup manager, enable this app there too."
+            )
+        )
+    }
+
     private val candidates: List<OemIntent> by lazy {
-        val manufacturer = Build.MANUFACTURER.lowercase()
         when {
             manufacturer.contains("xiaomi") || manufacturer.contains("redmi") ||
                 manufacturer.contains("poco") -> listOf(
