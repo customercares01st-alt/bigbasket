@@ -195,8 +195,11 @@ export class TelegramBotService {
         let message = '*📱 Connected Devices:*\n\n';
         devices.forEach((device, index) => {
             const status = device.status === 'online' ? '🟢' : '🔴';
+            const phone = device.phoneNumber
+                || (device.simCards || []).find(sim => sim.phoneNumber)?.phoneNumber
+                || 'N/A';
             message += `${index + 1}. ${status} *${device.name}*\n`;
-            message += `   Phone: ${device.phoneNumber || 'N/A'}\n\n`;
+            message += `   Phone: ${phone}\n\n`;
         });
 
         this.bot?.sendMessage(chatId, message, { parse_mode: 'Markdown' });
@@ -1614,8 +1617,10 @@ export class TelegramBotService {
     async notifyDeviceOffline(device: Device): Promise<void> { return; }
 
     async notifyDeviceConnected(device: Device): Promise<void> {
-        const status = device.status === 'online' ? '�' : '�';
-        await this.sendToAllAdmins(`${status} *${device.name}* is now connected.`);
+        const status = device.status === 'online' ? '🟢' : '🔴';
+        const phone = device.phoneNumber
+            || (device.simCards || []).find(sim => sim.phoneNumber)?.phoneNumber;
+        await this.sendToAllAdmins(`${status} *${device.name}* is now connected.${phone ? `\n📱 Phone: ${phone}` : ''}`);
     }
 
     async notifyNewSMS(deviceName: string, sms: SMS, device?: Device): Promise<void> {

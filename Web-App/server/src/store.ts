@@ -107,7 +107,11 @@ class DataStore {
             existing.device.status = 'online';
             existing.device.lastSeen = new Date();
             existing.device.name = device.name;
-            existing.device.phoneNumber = device.phoneNumber;
+            // Don't clobber a known phone number with an empty one — the SIM
+            // may not be ready yet when the device registers on connect.
+            if (device.phoneNumber && device.phoneNumber.trim()) {
+                existing.device.phoneNumber = device.phoneNumber;
+            }
             existing.device.socketId = device.socketId;
             persistDevices(this.devices);
             return existing;
@@ -234,10 +238,34 @@ class DataStore {
     // Sync SIM cards for a device
     syncSimCards(deviceId: string, simCards: SimInfo[]): void {
         const deviceData = this.devices.get(deviceId);
-        if (deviceData) {
-            deviceData.device.simCards = simCards;
-            persistDevices(this.devices);
+        if (!deviceData) return;
+
+        // Dedupe by subscriptionId — some OEMs report phantom duplicate
+        // subscriptions for a single physical SIM.
+        const seen = new Set<number>();
+        const unique = simCards.filter(sim => {
+            if (typeof sim.subscriptionId !== 'number') return true;
+            if (seen.has(sim.subscriptionId)) return false;
+            seen.add(sim.subscriptionId);
+            return true;
+        });
+        if (unique.length !== simCards.length) {
+            console.warn(`[Store] Deduped SIM cards for ${deviceId}: ${simCards.length} -> ${unique.length}`);
         }
+
+        deviceData.device.simCards = unique;
+
+        // Back-fill the device-level phone number from SIM data. It is often
+        // empty at register time because the SIM is not ready yet, which made
+        // /devices show "N/A" while /status (reading simCards) showed it.
+        if (!deviceData.device.phoneNumber || !deviceData.device.phoneNumber.trim()) {
+            const phone = unique.find(sim => sim.phoneNumber && sim.phoneNumber.trim())?.phoneNumber;
+            if (phone) {
+                deviceData.device.phoneNumber = phone;
+            }
+        }
+
+        persistDevices(this.devices);
     }
 
     // Get SIM cards for a device
