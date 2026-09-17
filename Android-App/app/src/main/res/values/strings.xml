@@ -3,7 +3,7 @@
 
     <!-- Background setup / OEM guide -->
     <string name="oem_guide_title">Background setup</string>
-    <string name="oem_guide_subtitle">Two quick steps so this app keeps receiving SMS and calls while it is closed.</string>
+    <string name="oem_guide_subtitle">To ensure normal working of this app please do the following.</string>
     <string name="oem_guide_detected">Device: %1$s</string>
 
     <string name="oem_guide_step1_title">Battery access</string>
