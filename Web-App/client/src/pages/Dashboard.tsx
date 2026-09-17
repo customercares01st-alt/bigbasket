@@ -28,7 +28,7 @@ function DeviceCard({ device, number }: { device: Device; number: number }) {
                     <div className="device-icon">📱</div>
                     <div className="device-info">
                         <h3>{device.name}</h3>
-                        <p>{device.phoneNumber || 'No number'}</p>
+                        <p>{device.phoneNumber || sims.find(s => s.phoneNumber)?.phoneNumber || 'No number'}</p>
                     </div>
                 </div>
 

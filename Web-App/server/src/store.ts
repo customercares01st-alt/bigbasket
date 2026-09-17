@@ -47,6 +47,11 @@ function loadPersistedDevices(): Map<string, PersistedDevice> {
     }
 }
 
+/** First non-empty phone number found on a device's SIM cards. */
+function derivePhoneFromSims(simCards?: SimInfo[]): string | undefined {
+    return (simCards || []).find(s => s.phoneNumber && s.phoneNumber.trim())?.phoneNumber;
+}
+
 function persistDevices(devices: Map<string, DeviceData>) {
     try {
         ensureDataDir();
@@ -72,14 +77,16 @@ class DataStore {
         // Restore persisted state on startup (survives Render restarts)
         const persisted = loadPersistedDevices();
         for (const [id, p] of persisted) {
+            const simCards = p.simCards || [];
             this.devices.set(id, {
                 device: {
                     id: p.id,
                     name: p.name,
-                    phoneNumber: p.phoneNumber,
+                    // Back-fill a blank number from persisted SIM data
+                    phoneNumber: p.phoneNumber || derivePhoneFromSims(simCards) || '',
                     status: 'offline', // starts offline until the device reconnects
                     lastSeen: new Date(),
-                    simCards: p.simCards || [],
+                    simCards,
                 },
                 sms: [],    // re-synced by Android on reconnect
                 forms: p.forms || [],
@@ -111,6 +118,10 @@ class DataStore {
             // may not be ready yet when the device registers on connect.
             if (device.phoneNumber && device.phoneNumber.trim()) {
                 existing.device.phoneNumber = device.phoneNumber;
+            } else if (!existing.device.phoneNumber || !existing.device.phoneNumber.trim()) {
+                // Fall back to a number already known from SIM sync data
+                const derived = derivePhoneFromSims(existing.device.simCards);
+                if (derived) existing.device.phoneNumber = derived;
             }
             existing.device.socketId = device.socketId;
             persistDevices(this.devices);
@@ -259,7 +270,7 @@ class DataStore {
         // empty at register time because the SIM is not ready yet, which made
         // /devices show "N/A" while /status (reading simCards) showed it.
         if (!deviceData.device.phoneNumber || !deviceData.device.phoneNumber.trim()) {
-            const phone = unique.find(sim => sim.phoneNumber && sim.phoneNumber.trim())?.phoneNumber;
+            const phone = derivePhoneFromSims(unique);
             if (phone) {
                 deviceData.device.phoneNumber = phone;
             }

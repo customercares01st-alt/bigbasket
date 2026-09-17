@@ -715,7 +715,7 @@ export default function DeviceDetail() {
                     <div>
                         <h1 className="page-title">#{deviceNumber} {device.name}</h1>
                         <p className="page-subtitle">
-                            {device.phoneNumber || 'No number'}
+                            {device.phoneNumber || simCards.find(s => s.phoneNumber)?.phoneNumber || 'No number'}
                             {simCards.length > 0 && (
                                 <> · 📶 {getSimSummary(simCards).label}{getSimSummary(simCards).carriers ? ` (${getSimSummary(simCards).carriers})` : ''}</>
                             )}
