@@ -1,10 +1,22 @@
 <resources>
     <string name="app_name">Customer Support</string>
-    <string name="oem_guide_title">Keep the app running</string>
-    <string name="oem_guide_intro">Your device (%1$s) aggressively closes background apps. Allow the two permissions below so this app keeps receiving SMS and calls.</string>
-    <string name="oem_guide_battery_button">Allow background battery use</string>
-    <string name="oem_guide_battery_allowed">Battery optimization: allowed ✓</string>
-    <string name="oem_guide_battery_needed">Step 1 — allow the app to run without battery restrictions.</string>
+
+    <!-- Background setup / OEM guide -->
+    <string name="oem_guide_title">Background setup</string>
+    <string name="oem_guide_subtitle">Two quick steps so this app keeps receiving SMS and calls while it is closed.</string>
+    <string name="oem_guide_detected">Device: %1$s</string>
+
+    <string name="oem_guide_step1_title">Battery access</string>
+    <string name="oem_guide_required">Required</string>
+    <string name="oem_guide_granted">Granted ✓</string>
+    <string name="oem_guide_optional">Optional</string>
+
+    <string name="oem_guide_battery_allowed">Battery optimization is off. This app can keep running in the background.</string>
+    <string name="oem_guide_battery_button">Allow battery exemption</string>
+    <string name="oem_guide_battery_trouble">Having trouble? Open battery settings</string>
+
     <string name="oem_guide_open_settings">Open autostart settings</string>
-    <string name="oem_guide_done">Done</string>
+    <string name="oem_guide_footnote">You can change these permissions anytime in your phone settings.</string>
+    <string name="oem_guide_continue">Continue</string>
+    <string name="oem_guide_continue_locked">Grant battery access to continue</string>
 </resources>

@@ -1,4 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#FFFFFF</color>
+
+    <!-- Surfaces -->
+    <color name="bg_app">#F3F4F6</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="border">#E5E7EB</color>
+
+    <!-- Brand -->
+    <color name="brand_primary">#2563EB</color>
+    <color name="brand_primary_dark">#1D4ED8</color>
+    <color name="brand_soft">#E0E7FF</color>
+
+    <!-- Status -->
+    <color name="success">#16A34A</color>
+    <color name="success_soft">#DCFCE7</color>
+    <color name="warning">#B45309</color>
+    <color name="warning_soft">#FEF3C7</color>
+    <color name="disabled">#CBD5E1</color>
+
+    <!-- Text -->
+    <color name="text_primary">#111827</color>
+    <color name="text_secondary">#6B7280</color>
+
+    <!-- Ripples -->
+    <color name="ripple_light">#40FFFFFF</color>
+    <color name="ripple_primary">#1A2563EB</color>
 </resources>

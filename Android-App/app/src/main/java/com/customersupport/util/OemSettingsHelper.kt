@@ -9,12 +9,12 @@ import android.provider.Settings
 import android.util.Log
 
 /**
- * Opens the OEM-specific "Autostart" / "Background activity" settings screen.
+ * OEM-specific background guidance and deep links.
  *
  * On Xiaomi, Oppo, Vivo, Huawei, Samsung and similar OEMs, background services
  * are killed unless the user explicitly whitelists the app. There is no public
  * API to change this — the best we can do is deep-link the user to the right
- * screen. On AOSP / devices without such a screen we fall back to app details.
+ * screen and show the exact steps for their device.
  */
 object OemSettingsHelper {
 
@@ -22,8 +22,18 @@ object OemSettingsHelper {
 
     private data class OemIntent(val pkg: String, val cls: String)
 
-    /** Battery/autostart guidance for the detected device. */
-    data class OemGuide(val oemName: String, val steps: List<String>)
+    /** Device-specific background guidance. */
+    data class OemGuide(
+        val oemName: String,
+        /** Short OEM-specific hint shown next to the required battery step. */
+        val batteryHint: String,
+        /** Title for the optional autostart step, naming the OEM screen. */
+        val autostartTitle: String,
+        /** Short OEM-specific hint for the autostart step. */
+        val autostartHint: String,
+        /** Numbered steps shown under the autostart step. */
+        val steps: List<String>,
+    )
 
     private val manufacturer: String get() = Build.MANUFACTURER.lowercase()
 
@@ -36,131 +46,139 @@ object OemSettingsHelper {
     private fun isAsus() = manufacturer.contains("asus")
     private fun isLetv() = manufacturer.contains("letv") || manufacturer.contains("leeco")
 
-    /**
-     * Step-by-step battery whitelisting instructions for the current OEM.
-     * The wording is intentionally generic enough to survive UI changes while
-     * still naming the exact screens that matter.
-     */
     fun getBatteryGuide(): OemGuide = when {
         isXiaomi() -> OemGuide(
-            "Xiaomi / Redmi / POCO (MIUI)",
-            listOf(
-                "On the next screen, open Autostart and enable it for this app.",
-                "Go to Settings → Battery → App battery saver → this app → choose \"No restrictions\".",
-                "In the recent-apps view, tap and hold this app's card and lock it so it isn't cleared.",
-                "Set Battery saver to \"Performance\" only if you still lose connection."
+            oemName = "Xiaomi / Redmi / POCO (MIUI)",
+            batteryHint = "On MIUI, set this app to \"No restrictions\" under Battery → App battery saver.",
+            autostartTitle = "Autostart (MIUI Security)",
+            autostartHint = "MIUI blocks background apps unless Autostart is enabled in the Security app.",
+            steps = listOf(
+                "Open Security → Permissions → Autostart and enable this app.",
+                "In Battery → App battery saver, choose \"No restrictions\".",
+                "In Recents, lock this app's card so it isn't cleared."
             )
         )
         isHuawei() -> OemGuide(
-            "Huawei / Honor",
-            listOf(
-                "On the next screen, turn off \"Manage automatically\" for this app.",
-                "Enable Auto-launch, Secondary launch, and Run in background.",
-                "Go to Battery → More battery settings and disable \"Power-intensive prompt\".",
-                "In the recent-apps view, lock this app so it isn't cleared."
+            oemName = "Huawei / Honor (EMUI)",
+            batteryHint = "On EMUI, turn off \"Manage automatically\" in Battery → App launch for this app.",
+            autostartTitle = "App launch (EMUI)",
+            autostartHint = "EMUI needs App launch and Run in background enabled for background apps.",
+            steps = listOf(
+                "Open App launch and turn off \"Manage automatically\".",
+                "Enable Auto-launch, Secondary launch and Run in background.",
+                "Disable \"Power-intensive prompt\" in Battery settings."
             )
         )
         isOppo() -> OemGuide(
-            "OPPO / Realme (ColorOS)",
-            listOf(
-                "On the next screen, allow Auto-start for this app.",
-                "Go to Battery → this app and enable \"Allow background running\".",
-                "Enable \"Allow auto-launch\" and \"Allow background activity\" if shown.",
-                "In the recent-apps view, lock this app so it isn't cleared."
+            oemName = "OPPO / Realme (ColorOS)",
+            batteryHint = "On ColorOS, allow background running for this app in Battery settings.",
+            autostartTitle = "Startup manager (ColorOS)",
+            autostartHint = "ColorOS needs Auto-start and background running enabled.",
+            steps = listOf(
+                "Open Startup manager and allow this app to auto-start.",
+                "In Battery → this app, enable \"Allow background running\".",
+                "Lock this app in Recents."
             )
         )
         isVivo() -> OemGuide(
-            "Vivo / iQOO",
-            listOf(
-                "On the next screen, enable Autostart for this app.",
-                "Go to Battery → Background power consumption management and allow this app.",
-                "Turn off \"High background power consumption\" warnings for this app.",
-                "In the recent-apps view, lock this app so it isn't cleared."
+            oemName = "Vivo / iQOO",
+            batteryHint = "On Vivo, allow background power consumption for this app.",
+            autostartTitle = "Autostart (Vivo)",
+            autostartHint = "Vivo needs Autostart and background power enabled.",
+            steps = listOf(
+                "Enable Autostart for this app.",
+                "In Battery → Background power consumption management, allow this app.",
+                "Turn off high background power warnings."
             )
         )
         isSamsung() -> OemGuide(
-            "Samsung (One UI)",
-            listOf(
-                "Go to Settings → Battery → Background usage limits.",
-                "Make sure this app is NOT in \"Sleeping apps\".",
-                "Add this app to \"Never sleeping apps\".",
-                "Open Settings → Apps → this app → Battery and choose \"Unrestricted\"."
+            oemName = "Samsung (One UI)",
+            batteryHint = "On One UI, set this app's battery to \"Unrestricted\" and remove it from Sleeping apps.",
+            autostartTitle = "Sleeping apps (One UI)",
+            autostartHint = "One UI may put this app to sleep; add it to Never sleeping apps.",
+            steps = listOf(
+                "Open Battery → Background usage limits.",
+                "Remove this app from \"Sleeping apps\" and add it to \"Never sleeping apps\".",
+                "In Apps → this app → Battery, choose \"Unrestricted\"."
             )
         )
         isOnePlus() -> OemGuide(
-            "OnePlus (OxygenOS)",
-            listOf(
-                "On the next screen, enable Auto-launch for this app.",
-                "Go to Battery → Battery optimization → this app → \"Don't optimize\".",
-                "Set the app's battery usage to \"Allow background activity\"."
+            oemName = "OnePlus (OxygenOS)",
+            batteryHint = "On OxygenOS, set battery optimization to \"Don't optimize\" for this app.",
+            autostartTitle = "Auto-launch (OxygenOS)",
+            autostartHint = "OxygenOS needs Auto-launch enabled for background apps.",
+            steps = listOf(
+                "Enable Auto-launch for this app.",
+                "In Battery optimization, choose \"Don't optimize\".",
+                "Allow background activity."
             )
         )
         isAsus() -> OemGuide(
-            "ASUS",
-            listOf(
+            oemName = "ASUS",
+            batteryHint = "On ASUS, disable deep sleep and allow background activity.",
+            autostartTitle = "Auto-start Manager (ASUS)",
+            autostartHint = "ASUS needs Auto-start and no deep sleep for background apps.",
+            steps = listOf(
                 "Open Auto-start Manager and allow this app.",
-                "Go to Power saver / Mobile Manager and allow background activity for this app.",
-                "Disable any \"deep sleep\" or \"auto-deny\" option for this app."
+                "In Power saver, allow background activity.",
+                "Disable \"deep sleep\" for this app."
             )
         )
         isLetv() -> OemGuide(
-            "LeEco / Letv",
-            listOf(
-                "On the next screen, open Auto-boot management and allow this app.",
-                "Allow this app to run in the background in battery settings."
+            oemName = "LeEco / Letv",
+            batteryHint = "Allow this app to run in the background in battery settings.",
+            autostartTitle = "Auto-boot management (LeTV)",
+            autostartHint = "LeTV needs Auto-boot enabled for background apps.",
+            steps = listOf(
+                "Open Auto-boot management and allow this app.",
+                "Allow background running in battery settings."
             )
         )
         else -> OemGuide(
-            "Android",
-            listOf(
-                "Open App info for this app and choose Battery → \"Unrestricted\" (or \"Don't optimize\").",
-                "Allow background activity if the option is shown.",
-                "If your phone has an Autostart or Startup manager, enable this app there too."
+            oemName = "Android",
+            batteryHint = "Set this app's battery usage to \"Unrestricted\" or \"Don't optimize\".",
+            autostartTitle = "Autostart",
+            autostartHint = "Some devices need an Autostart or Startup manager entry.",
+            steps = listOf(
+                "Open App info → Battery and choose \"Unrestricted\".",
+                "Allow background activity if shown.",
+                "Enable this app in any Autostart or Startup manager."
             )
         )
     }
 
     private val candidates: List<OemIntent> by lazy {
         when {
-            manufacturer.contains("xiaomi") || manufacturer.contains("redmi") ||
-                manufacturer.contains("poco") -> listOf(
+            isXiaomi() -> listOf(
                 OemIntent("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")
             )
-
-            manufacturer.contains("huawei") || manufacturer.contains("honor") -> listOf(
+            isHuawei() -> listOf(
                 OemIntent("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"),
                 OemIntent("com.huawei.systemmanager", "com.huawei.systemmanager.optimize.process.ProtectActivity")
             )
-
-            manufacturer.contains("oppo") || manufacturer.contains("realme") -> listOf(
+            isOppo() -> listOf(
                 OemIntent("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity"),
                 OemIntent("com.oppo.safe", "com.oppo.safe.permission.startup.StartupAppListActivity"),
                 OemIntent("com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity")
             )
-
-            manufacturer.contains("vivo") || manufacturer.contains("iqoo") -> listOf(
+            isVivo() -> listOf(
                 OemIntent("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"),
                 OemIntent("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity"),
                 OemIntent("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager")
             )
-
-            manufacturer.contains("samsung") -> listOf(
+            isSamsung() -> listOf(
                 OemIntent("com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity"),
                 OemIntent("com.samsung.android.sm", "com.samsung.android.sm.ui.battery.BatteryActivity")
             )
-
-            manufacturer.contains("oneplus") -> listOf(
+            isOnePlus() -> listOf(
                 OemIntent("com.oneplus.security", "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity")
             )
-
-            manufacturer.contains("asus") -> listOf(
+            isAsus() -> listOf(
                 OemIntent("com.asus.mobilemanager", "com.asus.mobilemanager.powersaver.PowerSaverSettings")
             )
-
-            manufacturer.contains("letv") || manufacturer.contains("leeco") -> listOf(
+            isLetv() -> listOf(
                 OemIntent("com.letv.android.letvsafe", "com.letv.android.letvsafe.AutobootManageActivity")
             )
-
             else -> emptyList()
         }
     }

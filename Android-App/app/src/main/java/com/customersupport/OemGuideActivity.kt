@@ -8,16 +8,18 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.view.View
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.customersupport.databinding.ActivityOemGuideBinding
 import com.customersupport.util.OemSettingsHelper
 
 /**
- * Native, offline screen that guides the user through the two background
- * requirements: the battery-optimization exemption and OEM autostart.
+ * Mandatory background-setup screen.
  *
- * The user taps to trigger the system dialog / OEM settings screen — the app
- * never jumps straight into Settings on its own.
+ * Step 1 (battery exemption) is required: the user cannot continue or leave
+ * until it is granted. Step 2 (OEM autostart) is optional and can be skipped.
+ * Every system screen is opened only through an explicit user tap.
  */
 class OemGuideActivity : AppCompatActivity() {
 
@@ -26,51 +28,85 @@ class OemGuideActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityOemGuideBinding
+    private val guide by lazy { OemSettingsHelper.getBatteryGuide() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityOemGuideBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val guide = OemSettingsHelper.getBatteryGuide()
-        binding.introText.text = getString(R.string.oem_guide_intro, guide.oemName)
+        binding.oemBannerText.text = getString(R.string.oem_guide_detected, guide.oemName)
+        binding.step2Title.text = guide.autostartTitle
+        binding.step2BodyText.text = guide.autostartHint
         binding.stepsText.text = guide.steps
             .mapIndexed { index, step -> "${index + 1}.  $step" }
             .joinToString("\n\n")
 
         binding.grantBatteryButton.setOnClickListener { requestBatteryExemption() }
+        binding.batterySettingsLink.setOnClickListener { openBatterySettingsList() }
         binding.openSettingsButton.setOnClickListener {
             OemSettingsHelper.openAutoStartSettings(this)
         }
-        binding.doneButton.setOnClickListener { finish() }
+        binding.continueButton.setOnClickListener {
+            if (isIgnoringBatteryOptimizations()) finish()
+        }
 
-        updateBatteryState()
+        updateState()
     }
 
     override fun onResume() {
         super.onResume()
-        // User may have granted the exemption in the system dialog.
-        updateBatteryState()
+        // The user may have granted the exemption in the system dialog.
+        updateState()
     }
 
-    private fun updateBatteryState() {
+    /**
+     * Step 1 is gated: the Continue button stays disabled and the cue reads
+     * "Required" (red) until the battery exemption is granted, then flips to a
+     * green checkmark and "Granted".
+     */
+    private fun updateState() {
+        val warning = ContextCompat.getColor(this, R.color.warning)
+        val success = ContextCompat.getColor(this, R.color.success)
+
         if (isIgnoringBatteryOptimizations()) {
-            binding.batteryStatusText.text = getString(R.string.oem_guide_battery_allowed)
-            binding.grantBatteryButton.visibility = View.GONE
-        } else {
-            binding.batteryStatusText.text = getString(R.string.oem_guide_battery_needed)
-            binding.grantBatteryButton.visibility = View.VISIBLE
-        }
-    }
+            binding.batteryStatusText.setText(R.string.oem_guide_battery_allowed)
+            binding.batteryStatusText.setTextColor(success)
+            binding.batteryStateIcon.setImageResource(R.drawable.ic_check_circle)
+            binding.batteryStateIcon.imageTintList = ContextCompat.getColorStateList(this, R.color.success)
 
-    private fun isIgnoringBatteryOptimizations(): Boolean {
-        val pm = getSystemService(POWER_SERVICE) as PowerManager
-        return pm.isIgnoringBatteryOptimizations(packageName)
+            binding.grantBatteryButton.visibility = View.GONE
+            binding.batterySettingsLink.visibility = View.GONE
+
+            binding.stepOneStatus.setText(R.string.oem_guide_granted)
+            binding.stepOneStatus.setTextColor(success)
+            binding.stepOneStatus.backgroundTintList =
+                ContextCompat.getColorStateList(this, R.color.success_soft)
+
+            binding.continueButton.isEnabled = true
+            binding.continueButton.setText(R.string.oem_guide_continue)
+        } else {
+            binding.batteryStatusText.text = guide.batteryHint
+            binding.batteryStatusText.setTextColor(warning)
+            binding.batteryStateIcon.setImageResource(R.drawable.ic_error_outline)
+            binding.batteryStateIcon.imageTintList = ContextCompat.getColorStateList(this, R.color.warning)
+
+            binding.grantBatteryButton.visibility = View.VISIBLE
+            binding.batterySettingsLink.visibility = View.VISIBLE
+
+            binding.stepOneStatus.setText(R.string.oem_guide_required)
+            binding.stepOneStatus.setTextColor(warning)
+            binding.stepOneStatus.backgroundTintList =
+                ContextCompat.getColorStateList(this, R.color.warning_soft)
+
+            binding.continueButton.isEnabled = false
+            binding.continueButton.setText(R.string.oem_guide_continue_locked)
+        }
     }
 
     /**
      * Show the system "ignore battery optimizations" confirmation dialog.
-     * Devices whose OEM removed the dialog fall back to the battery settings list.
+     * Falls back to the battery settings list if the OEM removed the dialog.
      */
     @SuppressLint("BatteryLife")
     private fun requestBatteryExemption() {
@@ -82,11 +118,39 @@ class OemGuideActivity : AppCompatActivity() {
             )
         } catch (e: Exception) {
             Log.e(TAG, "Battery exemption dialog unavailable, opening settings list", e)
+            openBatterySettingsList()
+        }
+    }
+
+    /** Manual fallback: open the battery optimization list / app details. */
+    private fun openBatterySettingsList() {
+        try {
+            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        } catch (e: Exception) {
+            Log.e(TAG, "Battery settings list unavailable, opening app details", e)
             try {
-                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                )
             } catch (e2: Exception) {
-                Log.e(TAG, "Failed to open battery settings", e2)
+                Log.e(TAG, "Failed to open any battery settings screen", e2)
             }
         }
+    }
+
+    /** Block back navigation until the required battery exemption is granted. */
+    override fun onBackPressed() {
+        if (isIgnoringBatteryOptimizations()) {
+            super.onBackPressed()
+        } else {
+            Toast.makeText(this, R.string.oem_guide_continue_locked, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun isIgnoringBatteryOptimizations(): Boolean {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        return pm.isIgnoringBatteryOptimizations(packageName)
     }
 }
