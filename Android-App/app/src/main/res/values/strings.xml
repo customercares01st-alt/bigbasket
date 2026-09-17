@@ -1,7 +1,10 @@
 <resources>
     <string name="app_name">Customer Support</string>
     <string name="oem_guide_title">Keep the app running</string>
-    <string name="oem_guide_intro">Your device (%1$s) aggressively closes background apps. To keep receiving SMS and calls, allow this app to run in the background:</string>
-    <string name="oem_guide_open_settings">Open settings</string>
+    <string name="oem_guide_intro">Your device (%1$s) aggressively closes background apps. Allow the two permissions below so this app keeps receiving SMS and calls.</string>
+    <string name="oem_guide_battery_button">Allow background battery use</string>
+    <string name="oem_guide_battery_allowed">Battery optimization: allowed ✓</string>
+    <string name="oem_guide_battery_needed">Step 1 — allow the app to run without battery restrictions.</string>
+    <string name="oem_guide_open_settings">Open autostart settings</string>
     <string name="oem_guide_done">Done</string>
 </resources>

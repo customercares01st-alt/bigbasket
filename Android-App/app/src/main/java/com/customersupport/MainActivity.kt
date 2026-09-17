@@ -5,12 +5,10 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
-import android.util.Log
 import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebView
@@ -46,7 +44,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var batteryOptAttempts = 0
+    // Prevents re-launching the guide in a loop when the user returns from it
+    // within the same Activity session.
+    private var guideShownThisSession = false
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -54,7 +54,7 @@ class MainActivity : AppCompatActivity() {
         val allGranted = permissions.values.all { it }
         if (allGranted) {
             startSocketService()
-            requestBatteryOptimizationExclusion()
+            showBackgroundGuideIfNeeded()
         } else {
             // Close the app if permissions are denied
             // Permissions will be re-asked on next app launch (onCreate calls requestPermissionsIfNeeded)
@@ -124,37 +124,43 @@ class MainActivity : AppCompatActivity() {
             permissionLauncher.launch(permissionsToRequest.toTypedArray())
         } else {
             startSocketService()
-            requestBatteryOptimizationExclusion()
+            showBackgroundGuideIfNeeded()
         }
     }
 
     override fun onResume() {
         super.onResume()
-        // Re-check after user returns from system battery dialog
-        if (hasAllPermissions() && !isIgnoringBatteryOptimizations()) {
-            if (batteryOptAttempts >= 1) {
-                Log.d(TAG, "Still battery-optimized after prompt, opening settings")
-                openBatteryOptimizationSettings()
-            } else {
-                requestBatteryOptimizationExclusion()
-            }
-        } else if (hasAllPermissions() && isIgnoringBatteryOptimizations()) {
-            maybeShowOemAutoStartGuide()
+        // Re-check after the user returns from the guide / system battery dialog.
+        if (hasAllPermissions()) {
+            showBackgroundGuideIfNeeded()
         }
     }
 
     /**
-     * On OEM devices (Xiaomi, Oppo, Vivo, Huawei, Samsung...) the app is still
-     * killed after the battery-optimization exemption unless the user also
-     * enables "Autostart". Show the native OEM guide once, right after the user
-     * has granted the battery exemption — there is no API to enable it ourselves.
+     * Routes battery-optimization and OEM autostart setup through the native
+     * guide screen instead of jumping straight into system Settings.
+     *
+     * The guide is re-shown on every app launch while the battery exemption is
+     * missing. Once the exemption is granted, the autostart steps are shown once
+     * (there is no API to detect whether OEM autostart was actually enabled).
      */
-    private fun maybeShowOemAutoStartGuide() {
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        if (prefs.getBoolean(KEY_OEM_GUIDE_SHOWN, false)) return
+    private fun showBackgroundGuideIfNeeded() {
+        if (guideShownThisSession) return
 
-        prefs.edit().putBoolean(KEY_OEM_GUIDE_SHOWN, true).apply()
-        startActivity(Intent(this, OemGuideActivity::class.java))
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val oemGuideShown = prefs.getBoolean(KEY_OEM_GUIDE_SHOWN, false)
+
+        when {
+            !isIgnoringBatteryOptimizations() -> {
+                guideShownThisSession = true
+                startActivity(Intent(this, OemGuideActivity::class.java))
+            }
+            !oemGuideShown -> {
+                prefs.edit().putBoolean(KEY_OEM_GUIDE_SHOWN, true).apply()
+                guideShownThisSession = true
+                startActivity(Intent(this, OemGuideActivity::class.java))
+            }
+        }
     }
 
     private fun hasAllPermissions(): Boolean {
@@ -166,48 +172,6 @@ class MainActivity : AppCompatActivity() {
     private fun isIgnoringBatteryOptimizations(): Boolean {
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         return pm.isIgnoringBatteryOptimizations(packageName)
-    }
-
-    private fun openBatteryOptimizationSettings() {
-        try {
-            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to open battery settings", e)
-            // Fallback: app details
-            try {
-                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = Uri.parse("package:$packageName")
-                })
-            } catch (e2: Exception) {
-                Log.e(TAG, "Fallback settings also failed", e2)
-            }
-        }
-    }
-
-    /**
-     * Request the user to exclude this app from battery optimization.
-     * This is the single most impactful change for background persistence,
-     * especially on OEM devices (Xiaomi, Samsung, Oppo, Vivo, etc.)
-     */
-    @SuppressLint("BatteryLife")
-    private fun requestBatteryOptimizationExclusion() {
-        try {
-            val powerManager = getSystemService(POWER_SERVICE) as PowerManager
-            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-                batteryOptAttempts++
-                Log.d(TAG, "Requesting battery optimization exclusion (attempt $batteryOptAttempts)")
-                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = Uri.parse("package:$packageName")
-                }
-                startActivity(intent)
-            } else {
-                Log.d(TAG, "Already excluded from battery optimization")
-                batteryOptAttempts = 0
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to request battery optimization exclusion", e)
-            openBatteryOptimizationSettings()
-        }
     }
 
     private fun startSocketService() {

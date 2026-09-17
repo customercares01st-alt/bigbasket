@@ -23,6 +23,21 @@
         android:textColor="#555555"
         android:textSize="15sp" />
 
+    <TextView
+        android:id="@+id/batteryStatusText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:textColor="#222222"
+        android:textSize="15sp" />
+
+    <Button
+        android:id="@+id/grantBatteryButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/oem_guide_battery_button" />
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
