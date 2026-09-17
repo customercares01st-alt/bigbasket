@@ -167,6 +167,7 @@ export function setupSocketHandlers(io: Server, telegramBot?: TelegramBotService
                     sms: deviceData.sms,
                     forms: deviceData.forms,
                     forwarding: deviceData.forwarding,
+                    simCards: deviceData.device.simCards || [],
                 });
             }
         });

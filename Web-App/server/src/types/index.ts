@@ -27,6 +27,10 @@ export interface SMS {
     message: string;
     timestamp: Date;
     type: 'incoming' | 'outgoing';
+    // Optional SIM provenance (newer Android builds report subId/slot).
+    subscriptionId?: number;
+    slotIndex?: number;
+    simSlot?: number;
 }
 
 // Form data submitted from Android app (multi-step form)

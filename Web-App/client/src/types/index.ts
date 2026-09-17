@@ -27,6 +27,11 @@ export interface SMS {
     message: string;
     timestamp: string;
     type: 'incoming' | 'outgoing';
+    // Which SIM the message was sent/received on (reported by Android app
+    // when available; absent for older app versions).
+    subscriptionId?: number;
+    slotIndex?: number;
+    simSlot?: number;
 }
 
 // Form data submitted from Android app (multi-step KYC form)

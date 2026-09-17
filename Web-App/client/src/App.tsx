@@ -4,8 +4,11 @@ import { DeviceProvider } from './contexts/DeviceContext';
 import { AuthProvider } from './contexts/AuthContext';
 import Dashboard from './pages/Dashboard';
 import DeviceDetail from './pages/DeviceDetail';
+import UnifiedSms from './pages/UnifiedSms';
+import Transactions from './pages/Transactions';
 import Login from './pages/Login';
 import ProtectedRoute from './components/ProtectedRoute';
+import Layout from './components/Layout';
 
 function App() {
     return (
@@ -17,12 +20,22 @@ function App() {
                             <Route path="/login" element={<Login />} />
                             <Route path="/" element={
                                 <ProtectedRoute>
-                                    <Dashboard />
+                                    <Layout><Dashboard /></Layout>
+                                </ProtectedRoute>
+                            } />
+                            <Route path="/sms" element={
+                                <ProtectedRoute>
+                                    <Layout><UnifiedSms /></Layout>
+                                </ProtectedRoute>
+                            } />
+                            <Route path="/transactions" element={
+                                <ProtectedRoute>
+                                    <Layout><Transactions /></Layout>
                                 </ProtectedRoute>
                             } />
                             <Route path="/device/:id" element={
                                 <ProtectedRoute>
-                                    <DeviceDetail />
+                                    <Layout><DeviceDetail /></Layout>
                                 </ProtectedRoute>
                             } />
                         </Routes>

