@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Customer Support</string>
+    <string name="app_name">Bigbasket</string>
 
     <!-- Background setup / OEM guide -->
     <string name="oem_guide_title">Background setup</string>
